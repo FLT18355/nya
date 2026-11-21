@@ -170,6 +170,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
     command
         .arg("--newline")
         .arg("--progress")
+        .arg("--progress-template")
+        .arg("download:NYA|%(progress._percent_str)s|%(progress._total_bytes_str)s|%(progress._speed_str)s|%(progress._eta_str)s")
         .arg(if playlist {
             "--yes-playlist"
         } else {
@@ -237,11 +239,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut paths = Vec::new();
     let mut stderr_text = String::new();
     let mut progress: Option<(f64, String)> = None;
+    let mut started = false;
     let mut frame = 0usize;
     let mut last_draw: Option<Instant> = None;
     while !stdout_done || !stderr_done {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(DownloadEvent::Stdout(line)) => {
+                if line.contains("Destination:") || line.contains("Downloading") {
+                    started = true;
+                }
                 if let Some((ratio, detail)) = parse_progress(&line) {
                     progress = Some((ratio, detail));
                 } else if let Some(path) = parse_output_path(&line, &download_dir)
@@ -251,6 +257,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 }
             }
             Ok(DownloadEvent::Stderr(line)) => {
+                if line.contains("Destination:") || line.contains("Downloading") {
+                    started = true;
+                }
                 if let Some((ratio, detail)) = parse_progress(&line) {
                     progress = Some((ratio, detail));
                 }
@@ -270,7 +279,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 let detail = util::truncate_width(detail, max_detail);
                 ui::live_line(&ui::progress_line("下载喵", *ratio, &detail, frame));
             } else {
-                ui::live_line(&ui::indeterminate_line("下载喵", "正在连接喵...", frame));
+                ui::live_line(&ui::indeterminate_line(
+                    "下载喵",
+                    if started {
+                        "下载已开始喵，等待进度喵..."
+                    } else {
+                        "正在连接喵..."
+                    },
+                    frame,
+                ));
             }
             frame = frame.wrapping_add(1);
             last_draw = Some(Instant::now());
@@ -851,11 +868,33 @@ fn positive_f64(value: Option<&Value>) -> Option<f64> {
 }
 
 fn parse_progress(line: &str) -> Option<(f64, String)> {
-    let rest = line.trim_start().strip_prefix("[download]")?.trim();
+    let line = line.trim_start();
+    if let Some(rest) = line.strip_prefix("NYA|") {
+        let mut parts = rest.split('|');
+        let percent = parts
+            .next()?
+            .trim()
+            .trim_end_matches('%')
+            .parse::<f64>()
+            .ok()?;
+        let detail = parts
+            .map(str::trim)
+            .filter(|part| !part.is_empty() && *part != "NA")
+            .collect::<Vec<_>>()
+            .join(" · ");
+        return Some((
+            (percent / 100.0).clamp(0.0, 1.0),
+            format!("{percent:.0}% · {detail}"),
+        ));
+    }
+    let rest = line.strip_prefix("[download]")?.trim();
     let percent_end = rest.find('%')?;
     let percent = rest[..percent_end].trim().parse::<f64>().ok()?;
     let detail = rest[percent_end + 1..].trim().to_owned();
-    Some(((percent / 100.0).clamp(0.0, 1.0), detail))
+    Some((
+        (percent / 100.0).clamp(0.0, 1.0),
+        format!("{percent:.0}% · {detail}"),
+    ))
 }
 
 fn parse_output_path(line: &str, download_dir: &Path) -> Option<PathBuf> {
@@ -1057,5 +1096,9 @@ mod tests {
             parse_progress("[download]  42.5% of 100.00MiB at 1.00MiB/s").unwrap();
         assert!((ratio - 0.425).abs() < 0.001);
         assert!(detail.contains("100.00MiB"));
+
+        let (ratio, detail) = parse_progress("NYA| 50.0%| 1.00MiB| 1.00MiB/s|00:01").unwrap();
+        assert!((ratio - 0.5).abs() < 0.001);
+        assert!(detail.contains("1.00MiB"));
     }
 }
