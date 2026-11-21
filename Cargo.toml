@@ -1,0 +1,9 @@
+[package]
+name = "nya"
+version = "0.1.0"
+edition = "2024"
+description = "终端工具：缓存清理、Bilibili 下载、解压、音频转换"
+
+[dependencies]
+crossterm = "0.28"
+serde_json = "1"
