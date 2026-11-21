@@ -1,6 +1,6 @@
 [package]
 name = "nya"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "终端工具：缓存清理、Bilibili 下载、解压、音频转换"
 

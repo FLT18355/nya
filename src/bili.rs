@@ -169,6 +169,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut command = Command::new(&config.yt_dlp);
     command
         .arg("--newline")
+        .arg("--progress")
         .arg(if playlist {
             "--yes-playlist"
         } else {
