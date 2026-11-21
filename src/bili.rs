@@ -5,7 +5,7 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::Value;
 
@@ -239,10 +239,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut paths = Vec::new();
     let mut stderr_text = String::new();
     let mut progress: Option<f64> = None;
-    let mut started = false;
     let mut frame = 0usize;
     let mut last_draw: Option<Instant> = None;
     let download_started = Instant::now();
+    let download_wall = SystemTime::now();
     let mut part_now = 0u64;
     let mut last_part = 0u64;
     let mut last_scan = Instant::now();
@@ -250,12 +250,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
     while !stdout_done || !stderr_done {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(DownloadEvent::Stdout(line)) => {
-                if line.contains("Destination:") || line.contains("Downloading") {
-                    started = true;
-                }
                 if let Some((ratio, _)) = parse_progress(&line) {
                     progress = Some(ratio);
-                    started = true;
                 } else if let Some(path) = parse_output_path(&line, &download_dir)
                     && !paths.contains(&path)
                 {
@@ -263,12 +259,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 }
             }
             Ok(DownloadEvent::Stderr(line)) => {
-                if line.contains("Destination:") || line.contains("Downloading") {
-                    started = true;
-                }
                 if let Some((ratio, _)) = parse_progress(&line) {
                     progress = Some(ratio);
-                    started = true;
                 }
                 if !stderr_text.is_empty() {
                     stderr_text.push('\n');
@@ -281,10 +273,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
         if last_scan.elapsed() >= Duration::from_millis(250) {
-            let now = part_bytes(&download_dir);
-            if now > 0 {
-                started = true;
-            }
+            let now = part_bytes(&download_dir).max(recent_bytes(&download_dir, download_wall));
             let elapsed = last_scan.elapsed().as_secs_f64();
             let instant = if now >= last_part && elapsed > 0.0 {
                 (now - last_part) as f64 / elapsed
@@ -307,7 +296,6 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 part_now,
                 speed,
                 download_started.elapsed(),
-                started,
             ));
             frame = frame.wrapping_add(1);
             last_draw = Some(Instant::now());
@@ -892,31 +880,51 @@ fn download_line(
     bytes: u64,
     speed: f64,
     elapsed: Duration,
-    started: bool,
 ) -> String {
     let mut parts = Vec::new();
     if let Some(percent) = percent {
         parts.push(format!("{:.0}%", percent * 100.0));
     }
     if bytes > 0 {
-        parts.push(util::human_size(bytes));
+        parts.push(format!("已收 {}", util::human_size(bytes)));
     }
     if speed >= 1.0 {
         parts.push(format!("{}/s", util::human_size(speed as u64)));
     }
     parts.push(util::format_duration(elapsed.as_secs_f64()));
-    let state = if started {
-        "下载中喵"
-    } else {
-        "准备中喵"
-    };
     format!(
-        "  {}  {}  {}  {}",
+        "  {}  {}  {}",
         ui::paint(ui::spinner(frame), ui::PINK),
         ui::paint("下载喵", ui::MAUVE),
-        ui::paint(state, ui::LAVENDER),
         ui::paint(parts.join(" · "), ui::OVERLAY1)
     )
+}
+
+fn recent_bytes(path: &Path, since: SystemTime) -> u64 {
+    let threshold = since.checked_sub(Duration::from_secs(2)).unwrap_or(since);
+    recent_bytes_after(path, threshold)
+}
+
+fn recent_bytes_after(path: &Path, threshold: SystemTime) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    let mut total = 0u64;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
+            total = total.saturating_add(recent_bytes_after(&path, threshold));
+        } else if meta.modified().is_ok_and(|modified| modified >= threshold) {
+            total = total.saturating_add(meta.len());
+        }
+    }
+    total
 }
 
 fn part_bytes(path: &Path) -> u64 {
@@ -1192,10 +1200,22 @@ mod tests {
     }
 
     #[test]
-    fn ticker_keeps_downloading_state() {
-        let line = download_line(0, None, 0, 0.0, Duration::from_secs(5), true);
-        assert!(line.contains("下载中喵"));
-        let line = download_line(0, None, 0, 0.0, Duration::from_secs(5), false);
-        assert!(line.contains("准备中喵"));
+    fn ticker_shows_bytes_without_status_word() {
+        let line = download_line(0, Some(0.5), 1024, 100.0, Duration::from_secs(5));
+        assert!(line.contains("50%"));
+        assert!(line.contains("已收"));
+        assert!(!line.contains("准备中"));
+        assert!(!line.contains("连接"));
+    }
+
+    #[test]
+    fn counts_recent_files() {
+        let dir = std::env::temp_dir().join(format!("nya-recent-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let since = SystemTime::now();
+        fs::write(dir.join("a.m4a"), b"12345").unwrap();
+        assert_eq!(recent_bytes(&dir, since), 5);
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
