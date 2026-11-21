@@ -122,7 +122,7 @@ fn print_help() {
     println!(
         "  {}  {}",
         ui::paint(ui::ICON_TRASH, ui::MAUVE),
-        ui::paint_bold("缓存清理", ui::TEXT)
+        ui::paint_bold("缓存清理喵", ui::TEXT)
     );
     println!();
     println!("  {}", ui::paint("用法: nya cache [名称...]", ui::TEXT));
@@ -134,7 +134,7 @@ fn print_help() {
         )
     );
     println!();
-    println!("  {}", ui::paint_bold("可用名称", ui::LAVENDER));
+    println!("  {}", ui::paint_bold("可用名称喵", ui::LAVENDER));
     let names: Vec<&str> = all_specs().iter().map(|spec| spec.name).collect();
     for chunk in names.chunks(6) {
         println!("    {}", ui::paint(chunk.join("  "), ui::TEXT));
@@ -489,7 +489,7 @@ fn draw(
         out,
         "  {}  {}\r\n",
         ui::paint(ui::ICON_TRASH, ui::MAUVE),
-        ui::paint_bold("缓存清理", ui::TEXT)
+        ui::paint_bold("缓存清理喵", ui::TEXT)
     )?;
     write!(
         out,

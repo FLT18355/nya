@@ -133,12 +133,17 @@ pub fn header(icon: &str, title: &str, subtitle: &str) {
     println!();
 }
 
+pub fn version() -> String {
+    format!("nya v{} 喵", env!("CARGO_PKG_VERSION"))
+}
+
 pub fn home() {
     println!();
     println!(
-        "  {}  {}",
+        "  {}  {}  {}",
         paint(ICON_TERMINAL, MAUVE),
-        paint_bold("nya", PINK)
+        paint_bold("nya", PINK),
+        paint(format!("v{} 喵", env!("CARGO_PKG_VERSION")), OVERLAY1)
     );
     println!(
         "  {}",
@@ -148,14 +153,14 @@ pub fn home() {
         )
     );
     println!();
-    command(ICON_TRASH, "cache", "清理包管理器缓存");
-    command(ICON_DOWNLOAD, "bili", "下载 Bilibili 音视频");
-    command(ICON_ARCHIVE, "x", "解压 tar / zip / 7z / rar");
-    command(ICON_MUSIC, "audio", "转换音频格式");
-    command(ICON_SETTINGS, "config", "查看或初始化配置");
-    command(ICON_INFO, "help", "完整帮助");
+    command(ICON_TRASH, "cache", "清理包管理器缓存喵");
+    command(ICON_DOWNLOAD, "bili", "下载 Bilibili 音视频喵");
+    command(ICON_ARCHIVE, "x", "解压 tar / zip / 7z / rar 喵");
+    command(ICON_MUSIC, "audio", "转换音频格式喵");
+    command(ICON_SETTINGS, "config", "查看或初始化配置喵");
+    command(ICON_INFO, "help", "完整帮助喵");
     println!();
-    println!("  {}", paint("nya help 查看完整帮助", OVERLAY1));
+    println!("  {}", paint("nya help 查看完整帮助喵", OVERLAY1));
     println!();
 }
 
@@ -175,18 +180,24 @@ pub fn help() {
         paint(ICON_TERMINAL, MAUVE),
         paint_bold("nya", TEXT)
     );
-    println!("  {}", paint("终端工具", OVERLAY2));
+    println!(
+        "  {}",
+        paint(
+            format!("终端工具 · v{} 喵", env!("CARGO_PKG_VERSION")),
+            OVERLAY2
+        )
+    );
     println!();
     println!("  {}", paint_bold("用法", LAVENDER));
     println!("    {}", paint("nya <命令> [选项]", TEXT));
     println!();
     println!("  {}", paint_bold("命令", LAVENDER));
-    command(ICON_TRASH, "cache", "选择并清理包管理器缓存");
-    command(ICON_DOWNLOAD, "bili", "下载 Bilibili 音视频");
-    command(ICON_ARCHIVE, "x", "解压 tar / zip / 7z / rar 压缩包");
-    command(ICON_MUSIC, "audio", "用 ffmpeg 转换音频格式");
-    command(ICON_SETTINGS, "config", "查看或初始化配置");
-    command(ICON_INFO, "help", "显示这份帮助");
+    command(ICON_TRASH, "cache", "选择并清理包管理器缓存喵");
+    command(ICON_DOWNLOAD, "bili", "下载 Bilibili 音视频喵");
+    command(ICON_ARCHIVE, "x", "解压 tar / zip / 7z / rar 压缩包喵");
+    command(ICON_MUSIC, "audio", "用 ffmpeg 转换音频格式喵");
+    command(ICON_SETTINGS, "config", "查看或初始化配置喵");
+    command(ICON_INFO, "help", "显示这份帮助喵");
     println!();
     println!("  {}", paint_bold("cache", LAVENDER));
     println!(

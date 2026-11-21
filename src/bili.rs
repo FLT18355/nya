@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{self, BufRead, BufReader, IsTerminal, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -220,30 +220,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
     if let Some(stdout) = stdout {
         let sender = sender.clone();
         std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                let Ok(line) = line else {
-                    break;
-                };
-                if sender.send(DownloadEvent::Stdout(line)).is_err() {
-                    break;
-                }
-            }
+            pump_lines(stdout, sender.clone(), false);
             let _ = sender.send(DownloadEvent::StdoutDone);
         });
     }
     if let Some(stderr) = stderr {
         let sender = sender.clone();
         std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                let Ok(line) = line else {
-                    break;
-                };
-                if sender.send(DownloadEvent::Stderr(line)).is_err() {
-                    break;
-                }
-            }
+            pump_lines(stderr, sender.clone(), true);
             let _ = sender.send(DownloadEvent::StderrDone);
         });
     }
@@ -310,14 +294,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
     if paths.is_empty() {
         println!(
             "  {}  {}",
-            ui::paint("目录", ui::OVERLAY1),
+            ui::paint("目录喵", ui::OVERLAY1),
             ui::paint(util::pretty_path(&download_dir), ui::MAUVE)
         );
     } else {
         for path in paths {
             let size = fs::metadata(&path)
                 .map(|meta| util::human_size(meta.len()))
-                .unwrap_or_else(|_| "未知大小".to_owned());
+                .unwrap_or_else(|_| "未知大小喵".to_owned());
             println!(
                 "  {}  {}  {}",
                 ui::paint(ui::ICON_FOLDER, ui::OVERLAY1),
@@ -339,15 +323,15 @@ fn parse_args(args: &[String]) -> Result<Option<Options>, String> {
     let mut index = 0usize;
     while index < args.len() {
         match args[index].as_str() {
-            "--audio" => options.audio = true,
-            "--cookies" => {
+            "-a" | "-x" | "--audio" => options.audio = true,
+            "-c" | "--cookies" => {
                 index += 1;
                 let Some(value) = args.get(index) else {
-                    return Err("--cookies 后面需要文件路径喵".to_owned());
+                    return Err("-c/--cookies 后面需要文件路径喵".to_owned());
                 };
                 options.cookies = Some(util::expand_tilde(value));
             }
-            "--no-cookies" => options.no_cookies = true,
+            "-n" | "--no-cookies" => options.no_cookies = true,
             "-o" | "--output" | "--dir" => {
                 index += 1;
                 let Some(value) = args.get(index) else {
@@ -355,14 +339,14 @@ fn parse_args(args: &[String]) -> Result<Option<Options>, String> {
                 };
                 options.output_dir = Some(util::expand_tilde(value));
             }
-            "--format" => {
+            "-f" | "--format" => {
                 index += 1;
                 let Some(value) = args.get(index) else {
-                    return Err("--format 后面需要 yt-dlp 格式选择器喵".to_owned());
+                    return Err("-f/--format 后面需要 yt-dlp 格式选择器喵".to_owned());
                 };
                 options.format = Some(value.clone());
             }
-            "--playlist" => options.playlist = Some(true),
+            "-p" | "--playlist" => options.playlist = Some(true),
             "--no-playlist" => options.playlist = Some(false),
             arg if arg.starts_with('-') => {
                 return Err(format!("未知选项喵: {arg}"));
@@ -453,6 +437,49 @@ fn is_bilibili_url(lower: &str) -> bool {
         host,
         "bilibili.com" | "www.bilibili.com" | "m.bilibili.com" | "b23.tv"
     )
+}
+
+fn pump_lines<R: Read>(mut reader: R, sender: mpsc::Sender<DownloadEvent>, stderr: bool) {
+    let mut buffer = [0u8; 8192];
+    let mut line = Vec::new();
+    while let Ok(read) = reader.read(&mut buffer) {
+        if read == 0 {
+            break;
+        }
+        for &byte in &buffer[..read] {
+            if byte == b'\n' || byte == b'\r' {
+                if line.is_empty() {
+                    continue;
+                }
+                let text = String::from_utf8_lossy(&line).trim().to_owned();
+                line.clear();
+                if text.is_empty() {
+                    continue;
+                }
+                let event = if stderr {
+                    DownloadEvent::Stderr(text)
+                } else {
+                    DownloadEvent::Stdout(text)
+                };
+                if sender.send(event).is_err() {
+                    return;
+                }
+            } else {
+                line.push(byte);
+            }
+        }
+    }
+    if !line.is_empty() {
+        let text = String::from_utf8_lossy(&line).trim().to_owned();
+        if !text.is_empty() {
+            let event = if stderr {
+                DownloadEvent::Stderr(text)
+            } else {
+                DownloadEvent::Stdout(text)
+            };
+            let _ = sender.send(event);
+        }
+    }
 }
 
 fn choose_format(
@@ -823,7 +850,7 @@ fn positive_f64(value: Option<&Value>) -> Option<f64> {
 }
 
 fn parse_progress(line: &str) -> Option<(f64, String)> {
-    let rest = line.strip_prefix("[download]")?.trim();
+    let rest = line.trim_start().strip_prefix("[download]")?.trim();
     let percent_end = rest.find('%')?;
     let percent = rest[..percent_end].trim().parse::<f64>().ok()?;
     let detail = rest[percent_end + 1..].trim().to_owned();
@@ -865,44 +892,58 @@ fn print_help() {
     println!(
         "  {}",
         ui::paint(
-            "用法: nya bili [视频ID|链接] [--audio] [--cookies 路径] [--no-cookies]",
+            "用法: nya bili [视频ID|链接] [-a|-x] [-c Cookies] [-n] [-o 目录] [-f 选择器] [-p]",
             ui::TEXT
         )
     );
     println!(
         "  {}",
         ui::paint(
-            "        [-o 目录] [--format 选择器] [--playlist|--no-playlist]",
+            "        [--audio] [--cookies 路径] [--no-cookies] [--format 选择器] [--playlist|--no-playlist]",
             ui::TEXT
         )
     );
     println!();
-    println!("  {}", ui::paint_bold("视频 ID / 链接", ui::LAVENDER));
+    println!("  {}", ui::paint_bold("视频 ID / 链接喵", ui::LAVENDER));
     println!(
         "    {}",
         ui::paint("BV 号、av 号、纯数字 av 号或 Bilibili 链接", ui::TEXT)
     );
     println!();
-    println!("  {}", ui::paint_bold("选项", ui::LAVENDER));
+    println!("  {}", ui::paint_bold("选项喵", ui::LAVENDER));
     println!(
         "    {}",
-        ui::paint("--audio        仅下载音频并转码", ui::TEXT)
+        ui::paint("-a, -x, --audio   仅下载音频并转码", ui::TEXT)
     );
-    println!(
-        "    {}",
-        ui::paint("--cookies      指定 Cookies 文件，默认读取配置", ui::TEXT)
-    );
-    println!(
-        "    {}",
-        ui::paint("--no-cookies   本次不使用 Cookies", ui::TEXT)
-    );
-    println!("    {}", ui::paint("-o, --output   覆盖下载目录", ui::TEXT));
     println!(
         "    {}",
         ui::paint(
-            "--format       跳过清晰度选择，直接使用 yt-dlp 选择器",
+            "-c, --cookies     指定 Cookies 文件，默认读取配置",
             ui::TEXT
         )
+    );
+    println!(
+        "    {}",
+        ui::paint("-n, --no-cookies  本次不使用 Cookies", ui::TEXT)
+    );
+    println!(
+        "    {}",
+        ui::paint("-o, --output      覆盖下载目录", ui::TEXT)
+    );
+    println!(
+        "    {}",
+        ui::paint(
+            "-f, --format      跳过清晰度选择，直接使用 yt-dlp 选择器",
+            ui::TEXT
+        )
+    );
+    println!(
+        "    {}",
+        ui::paint("-p, --playlist    下载播放列表", ui::TEXT)
+    );
+    println!(
+        "    {}",
+        ui::paint("    --no-playlist 只下载单个视频", ui::TEXT)
     );
     println!();
     println!(

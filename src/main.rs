@@ -26,8 +26,8 @@ fn main() -> ExitCode {
             ui::help();
             Ok(())
         }
-        "version" | "-V" | "--version" => {
-            println!("nya {}", env!("CARGO_PKG_VERSION"));
+        "version" | "-V" | "--version" | "-v" => {
+            println!("{}", ui::version());
             Ok(())
         }
         other => {

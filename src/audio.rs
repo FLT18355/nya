@@ -110,20 +110,20 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let duration = probe_duration(&input);
     let output_existed = output.exists();
 
-    ui::header(ui::ICON_MUSIC, "音频转换", "ffmpeg");
+    ui::header(ui::ICON_MUSIC, "音频转换喵", "ffmpeg 喵");
     println!(
         "  {}  {}",
-        ui::paint("输入", ui::OVERLAY1),
+        ui::paint("输入喵", ui::OVERLAY1),
         ui::paint(util::pretty_path(&input), ui::TEXT)
     );
     println!(
         "  {}  {}",
-        ui::paint("输出", ui::OVERLAY1),
+        ui::paint("输出喵", ui::OVERLAY1),
         ui::paint(util::pretty_path(&output), ui::MAUVE)
     );
     println!(
         "  {}  {}",
-        ui::paint("格式", ui::OVERLAY1),
+        ui::paint("格式喵", ui::OVERLAY1),
         ui::paint(codec_label(&format, &bitrate), ui::OVERLAY2)
     );
     println!();
@@ -241,7 +241,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     ui::success("转换完成喵。");
     println!(
         "  {}  {}  {}",
-        ui::paint("位置", ui::OVERLAY1),
+        ui::paint("位置喵", ui::OVERLAY1),
         ui::paint(util::pretty_path(&output), ui::MAUVE),
         ui::paint(size, ui::OVERLAY2)
     );
@@ -254,7 +254,7 @@ fn print_help() {
     println!(
         "  {}  {}",
         ui::paint(ui::ICON_MUSIC, ui::MAUVE),
-        ui::paint_bold("音频转换", ui::TEXT)
+        ui::paint_bold("音频转换喵", ui::TEXT)
     );
     println!();
     println!(

@@ -60,15 +60,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
         ui::hint("目标目录已有文件，同名文件可能会被覆盖喵。");
     }
 
-    ui::header(ui::ICON_ARCHIVE, "解压", "tar / zip / 7z / rar");
+    ui::header(ui::ICON_ARCHIVE, "解压喵", "tar / zip / 7z / rar 喵");
     println!(
         "  {}  {}",
-        ui::paint("压缩包", ui::OVERLAY1),
+        ui::paint("压缩包喵", ui::OVERLAY1),
         ui::paint(util::pretty_path(&input), ui::TEXT)
     );
     println!(
         "  {}  {}",
-        ui::paint("输出目录", ui::OVERLAY1),
+        ui::paint("输出目录喵", ui::OVERLAY1),
         ui::paint(util::pretty_path(&destination), ui::MAUVE)
     );
     println!();
@@ -86,7 +86,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     ui::success("解压完成喵。");
     println!(
         "  {}  {}",
-        ui::paint("位置", ui::OVERLAY1),
+        ui::paint("位置喵", ui::OVERLAY1),
         ui::paint(util::pretty_path(&destination), ui::MAUVE)
     );
     println!();
@@ -98,7 +98,7 @@ fn print_help() {
     println!(
         "  {}  {}",
         ui::paint(ui::ICON_ARCHIVE, ui::MAUVE),
-        ui::paint_bold("解压", ui::TEXT)
+        ui::paint_bold("解压喵", ui::TEXT)
     );
     println!();
     println!(

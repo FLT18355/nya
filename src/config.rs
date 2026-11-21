@@ -200,7 +200,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             "init" => {
                 let path = Config::init()?;
                 ui::success("配置已创建喵。");
-                field("路径", util::pretty_path(&path));
+                field("路径喵", util::pretty_path(&path));
                 println!();
                 Ok(())
             }
@@ -214,7 +214,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
 }
 
 fn show(config: &Config) {
-    ui::header(ui::ICON_SETTINGS, "配置", &util::pretty_path(&config.path));
+    ui::header(
+        ui::ICON_SETTINGS,
+        "配置喵",
+        &util::pretty_path(&config.path),
+    );
     let cookies = config
         .cookies
         .as_ref()
@@ -223,28 +227,28 @@ fn show(config: &Config) {
             format!("{} ({state})", util::pretty_path(path))
         })
         .unwrap_or_else(|| "不使用".to_owned());
-    field("下载目录", util::pretty_path(&config.download_dir));
-    field("Cookies 文件", cookies);
+    field("下载目录喵", util::pretty_path(&config.download_dir));
+    field("Cookies 喵", cookies);
     field(
-        "播放列表",
+        "播放列表喵",
         if config.playlist {
             "开启".to_owned()
         } else {
             "关闭".to_owned()
         },
     );
-    field("视频格式", config.video_format.clone());
+    field("视频格式喵", config.video_format.clone());
     field(
-        "合并容器",
+        "合并容器喵",
         config
             .merge_format
             .clone()
             .unwrap_or_else(|| "不指定".to_owned()),
     );
-    field("音频格式", config.audio_format.clone());
-    field("音频质量", config.audio_quality.clone());
-    field("输出模板", config.output_template.clone());
-    field("yt-dlp 路径", config.yt_dlp.clone());
+    field("音频格式喵", config.audio_format.clone());
+    field("音频质量喵", config.audio_quality.clone());
+    field("输出模板喵", config.output_template.clone());
+    field("yt-dlp 路径喵", config.yt_dlp.clone());
     println!();
     if !config.exists {
         ui::hint("未找到配置文件，当前使用默认值喵。运行 nya config init 创建。");
@@ -253,7 +257,7 @@ fn show(config: &Config) {
 }
 
 fn field(label: &str, value: String) {
-    let padding = 12usize.saturating_sub(util::display_width(label));
+    let padding = 14usize.saturating_sub(util::display_width(label));
     println!(
         "  {}{}  {}",
         ui::paint(label, ui::OVERLAY1),
@@ -267,7 +271,7 @@ fn print_help() {
     println!(
         "  {}  {}",
         ui::paint(ui::ICON_SETTINGS, ui::MAUVE),
-        ui::paint_bold("配置", ui::TEXT)
+        ui::paint_bold("配置喵", ui::TEXT)
     );
     println!();
     println!("  {}", ui::paint("用法: nya config [init]", ui::TEXT));
