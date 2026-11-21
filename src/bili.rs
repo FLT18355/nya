@@ -238,18 +238,23 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
     let mut paths = Vec::new();
     let mut stderr_text = String::new();
-    let mut progress: Option<(f64, String)> = None;
+    let mut progress: Option<f64> = None;
     let mut started = false;
     let mut frame = 0usize;
     let mut last_draw: Option<Instant> = None;
+    let download_started = Instant::now();
+    let mut part_now = 0u64;
+    let mut last_part = 0u64;
+    let mut last_scan = Instant::now();
+    let mut speed = 0.0f64;
     while !stdout_done || !stderr_done {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(DownloadEvent::Stdout(line)) => {
                 if line.contains("Destination:") || line.contains("Downloading") {
                     started = true;
                 }
-                if let Some((ratio, detail)) = parse_progress(&line) {
-                    progress = Some((ratio, detail));
+                if let Some((ratio, _)) = parse_progress(&line) {
+                    progress = Some(ratio);
                 } else if let Some(path) = parse_output_path(&line, &download_dir)
                     && !paths.contains(&path)
                 {
@@ -260,8 +265,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 if line.contains("Destination:") || line.contains("Downloading") {
                     started = true;
                 }
-                if let Some((ratio, detail)) = parse_progress(&line) {
-                    progress = Some((ratio, detail));
+                if let Some((ratio, _)) = parse_progress(&line) {
+                    progress = Some(ratio);
                 }
                 if !stderr_text.is_empty() {
                     stderr_text.push('\n');
@@ -273,22 +278,32 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        if last_draw.is_none_or(|last| last.elapsed() >= Duration::from_millis(80)) {
-            if let Some((ratio, detail)) = &progress {
-                let max_detail = ui::terminal_width().saturating_sub(28).clamp(12, 50);
-                let detail = util::truncate_width(detail, max_detail);
-                ui::live_line(&ui::progress_line("下载喵", *ratio, &detail, frame));
+        if last_scan.elapsed() >= Duration::from_millis(250) {
+            let now = part_bytes(&download_dir);
+            let elapsed = last_scan.elapsed().as_secs_f64();
+            let instant = if now >= last_part && elapsed > 0.0 {
+                (now - last_part) as f64 / elapsed
             } else {
-                ui::live_line(&ui::indeterminate_line(
-                    "下载喵",
-                    if started {
-                        "下载已开始喵，等待进度喵..."
-                    } else {
-                        "正在连接喵..."
-                    },
-                    frame,
-                ));
-            }
+                0.0
+            };
+            speed = if speed == 0.0 {
+                instant
+            } else {
+                speed * 0.65 + instant * 0.35
+            };
+            part_now = now;
+            last_part = now;
+            last_scan = Instant::now();
+        }
+        if last_draw.is_none_or(|last| last.elapsed() >= Duration::from_millis(80)) {
+            ui::live_line(&download_line(
+                frame,
+                progress,
+                part_now,
+                speed,
+                download_started.elapsed(),
+                started,
+            ));
             frame = frame.wrapping_add(1);
             last_draw = Some(Instant::now());
         }
@@ -298,7 +313,6 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .wait()
         .map_err(|error| format!("等待 yt-dlp 失败喵: {error}"))?;
     ui::end_live_line();
-
     if !status.success() {
         let detail = util::tail_lines(stderr_text.trim(), 10);
         if detail.is_empty() {
@@ -867,6 +881,65 @@ fn positive_f64(value: Option<&Value>) -> Option<f64> {
     value.and_then(Value::as_f64).filter(|value| *value > 0.0)
 }
 
+fn download_line(
+    frame: usize,
+    percent: Option<f64>,
+    bytes: u64,
+    speed: f64,
+    elapsed: Duration,
+    started: bool,
+) -> String {
+    let mut parts = Vec::new();
+    if let Some(percent) = percent {
+        parts.push(format!("{:.0}%", percent * 100.0));
+    }
+    if bytes > 0 {
+        parts.push(util::human_size(bytes));
+    }
+    if speed >= 1.0 {
+        parts.push(format!("{}/s", util::human_size(speed as u64)));
+    }
+    parts.push(util::format_duration(elapsed.as_secs_f64()));
+    let state = if bytes > 0 || started {
+        "下载中喵"
+    } else {
+        "连接中喵"
+    };
+    format!(
+        "  {}  {}  {}  {}",
+        ui::paint(ui::spinner(frame), ui::PINK),
+        ui::paint("下载喵", ui::MAUVE),
+        ui::paint(state, ui::LAVENDER),
+        ui::paint(parts.join(" · "), ui::OVERLAY1)
+    )
+}
+
+fn part_bytes(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    let mut total = 0u64;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
+            total = total.saturating_add(part_bytes(&path));
+        } else if path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("part"))
+        {
+            total = total.saturating_add(meta.len());
+        }
+    }
+    total
+}
+
 fn parse_progress(line: &str) -> Option<(f64, String)> {
     let line = line.trim_start();
     if let Some(rest) = line.strip_prefix("NYA|") {
@@ -1100,5 +1173,16 @@ mod tests {
         let (ratio, detail) = parse_progress("NYA| 50.0%| 1.00MiB| 1.00MiB/s|00:01").unwrap();
         assert!((ratio - 0.5).abs() < 0.001);
         assert!(detail.contains("1.00MiB"));
+    }
+
+    #[test]
+    fn counts_part_files() {
+        let dir = std::env::temp_dir().join(format!("nya-part-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("a.mp4.part"), b"12345").unwrap();
+        fs::write(dir.join("b.mp4"), b"ignored").unwrap();
+        assert_eq!(part_bytes(&dir), 5);
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
