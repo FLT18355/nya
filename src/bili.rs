@@ -255,6 +255,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 }
                 if let Some((ratio, _)) = parse_progress(&line) {
                     progress = Some(ratio);
+                    started = true;
                 } else if let Some(path) = parse_output_path(&line, &download_dir)
                     && !paths.contains(&path)
                 {
@@ -267,6 +268,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 }
                 if let Some((ratio, _)) = parse_progress(&line) {
                     progress = Some(ratio);
+                    started = true;
                 }
                 if !stderr_text.is_empty() {
                     stderr_text.push('\n');
@@ -280,6 +282,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         if last_scan.elapsed() >= Duration::from_millis(250) {
             let now = part_bytes(&download_dir);
+            if now > 0 {
+                started = true;
+            }
             let elapsed = last_scan.elapsed().as_secs_f64();
             let instant = if now >= last_part && elapsed > 0.0 {
                 (now - last_part) as f64 / elapsed
@@ -900,10 +905,10 @@ fn download_line(
         parts.push(format!("{}/s", util::human_size(speed as u64)));
     }
     parts.push(util::format_duration(elapsed.as_secs_f64()));
-    let state = if bytes > 0 || started {
+    let state = if started {
         "下载中喵"
     } else {
-        "连接中喵"
+        "准备中喵"
     };
     format!(
         "  {}  {}  {}  {}",
@@ -1184,5 +1189,13 @@ mod tests {
         fs::write(dir.join("b.mp4"), b"ignored").unwrap();
         assert_eq!(part_bytes(&dir), 5);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn ticker_keeps_downloading_state() {
+        let line = download_line(0, None, 0, 0.0, Duration::from_secs(5), true);
+        assert!(line.contains("下载中喵"));
+        let line = download_line(0, None, 0, 0.0, Duration::from_secs(5), false);
+        assert!(line.contains("准备中喵"));
     }
 }
